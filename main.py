@@ -3,18 +3,39 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 import yt_dlp
+from aiohttp import web
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# Render Web Service uchun soxta veb-server
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+
 def download_media(url: str, output_path: str):
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']
+            }
+        }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -22,7 +43,10 @@ def download_media(url: str, output_path: str):
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
-    await message.answer("Assalomu alaykum! Menga YouTube yoki Instagram video linkini yuboring.")
+    await message.answer(
+        "Assalomu alaykum! Menga **Instagram**, **YouTube** yoki **TikTok** video linkini yuboring.",
+        parse_mode="Markdown"
+    )
 
 @dp.message(F.text.startswith("http"))
 async def handle_link(message: types.Message):
@@ -46,7 +70,8 @@ async def handle_link(message: types.Message):
             os.remove(file_path)
 
 async def main():
-    print("Bot ishga tushdi...")
+    print("Bot va Web Server ishga tushdi...")
+    await start_web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
