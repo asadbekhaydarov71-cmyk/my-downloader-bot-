@@ -209,21 +209,19 @@ async def handle_link(message: types.Message):
         await status_msg.delete()
 
     except Exception as e:
+    error_text = repr(e)
 
-        print("=" * 50)
-        print("VIDEO YUKLASHDA XATO:")
-        print(repr(e))
-        print("=" * 50)
+    print("=" * 70)
+    print("YT-DLP XATOSI:")
+    print(error_text)
+    print("=" * 70)
 
-        try:
-
-            await status_msg.edit_text(
-                "❌ Video yuklab bo‘lmadi.\n\n"
-                "Havolani tekshirib qayta yuboring."
-            )
-
-        except Exception:
-            pass
+    try:
+        await status_msg.edit_text(
+            f"❌ Xatolik:\n\n{error_text[:3500]}"
+        )
+    except Exception:
+        pass
 
     finally:
 
