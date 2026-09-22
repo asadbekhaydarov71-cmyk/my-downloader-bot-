@@ -10,7 +10,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Render Web Service uchun soxta veb-server
+# Render Web Service uchun veb-server
 async def handle(request):
     return web.Response(text="Bot is running!")
 
@@ -25,16 +25,22 @@ async def start_web_server():
 
 def download_media(url: str, output_path: str):
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        # TikTok va Instagram uchun eng yaxshi format, YouTube uchun m8a/mp4
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
         'geo_bypass': True,
+        # Server IP blokirovkasidan o'tish uchun maxsus sozlamalar
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web']
+                'player_client': ['ios', 'android', 'web_embedded', 'mweb'],
+                'skip': ['hls', 'dash']
             }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1'
         }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -63,8 +69,12 @@ async def handle_link(message: types.Message):
         await message.answer_video(video=video_file, caption="✅ Videongiz tayyor!")
         await status_msg.delete()
     except Exception as e:
-        await status_msg.edit_text("❌ Xatolik: Videoni yuklab bo'lmadi.")
-        print(f"Xato: {e}")
+        error_text = str(e)
+        if "confirm you're not a bot" in error_text or "403" in error_text:
+            await status_msg.edit_text("❌ YouTube ushbu server IP-manzilini bloklagan. Shorts yoki boshqa qisqa videolarni sinab ko'ring.")
+        else:
+            await status_msg.edit_text(f"❌ Xatolik yuz berdi: Videoni yuklab bo'lmadi.")
+        print(f"Xato batafsil: {e}")
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
