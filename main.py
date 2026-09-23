@@ -3,7 +3,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import aiohttp
 from shazamio import Shazam
 import yt_dlp
@@ -11,7 +11,7 @@ import yt_dlp
 # Logging sozlamalari
 logging.basicConfig(level=logging.INFO)
 
-# Token va API kalitlari
+# Token
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8685324789:AAHvmECdQAv8fOmOMA0BmR7bdi07b5ewvUM").strip()
 
 bot = Bot(token=BOT_TOKEN)
@@ -53,12 +53,12 @@ async def handle_audio(message: types.Message):
         
         if 'track' in out:
             track = out['track']
-            title = track.get('title', 'Noma'lum')
-            subtitle = track.get('subtitle', 'Noma'lum')
+            title = track.get('title', 'Nomalum')
+            subtitle = track.get('subtitle', 'Nomalum')
             
-            caption = f"🎵 **Topilgan musiqa:**\n\n📌 **Nomi:** {title}\n👤 **Ijrochi:** {subtitle}"
+            caption = f"🎵 **Topilgan musiqa:**\n\n📌 **Nomi:** {title}\n👤 **Ijrochi:** {subtitle}\n\n🤖 @my_downloader_77_bot"
             
-            # YouTube orqali ushbu nomdagi MP3'ni izlab yuklash
+            # YouTube orqali MP3 yuklab olish
             search_query = f"ytsearch1:{title} {subtitle}"
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -120,10 +120,9 @@ async def handle_text(message: types.Message):
         
         filename = f"download_{message.from_user.id}.mp4"
         if not os.path.exists(filename):
-            # Boshqa kengaytmada yuklangan bo'lishi mumkin
             for f in os.listdir('.'):
                 if f.startswith(f"download_{message.from_user.id}"):
-                    filename = f
+                    filename = f"download_{message.from_user.id}.mp4"
                     break
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -133,7 +132,7 @@ async def handle_text(message: types.Message):
         await msg.edit_text("📤 Telegramga yuklanmoqda...")
         await message.answer_video(
             video=types.FSInputFile(filename),
-            caption="✅ Videongiz tayyor!",
+            caption="✅ Videongiz tayyor!\n\n🤖 @my_downloader_77_bot",
             reply_markup=keyboard
         )
         await msg.delete()
@@ -164,20 +163,8 @@ async def extract_audio_callback(callback: types.CallbackQuery):
         return
 
     mp3_file = f"extracted_{user_id}.mp3"
-    
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': mp3_file.replace('.mp3', ''),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'quiet': True,
-    }
 
     try:
-        # Kodni ishlatib audioni MP3 ga o'tkazish
         cmd = f"ffmpeg -i {video_file} -vn -ar 44100 -ac 2 -b:a 192k {mp3_file} -y"
         proc = await asyncio.create_subprocess_shell(cmd)
         await proc.communicate()
@@ -185,7 +172,7 @@ async def extract_audio_callback(callback: types.CallbackQuery):
         if os.path.exists(mp3_file):
             await callback.message.answer_audio(
                 audio=types.FSInputFile(mp3_file),
-                caption="🎵 Videodan ajratib olingan audio!"
+                caption="🎵 Videodan ajratib olingan audio!\n\n🤖 @my_downloader_77_bot"
             )
             os.remove(mp3_file)
         else:
