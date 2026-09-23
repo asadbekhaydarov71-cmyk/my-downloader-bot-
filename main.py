@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import asyncio
 from aiohttp import web
@@ -9,21 +10,22 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import yt_dlp
 from shazamio import Shazam
 
-# Logging
+# Logging sozlamalari
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE").strip()
+# Telegram bot tokeni (Environment'dan olinadi)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8714101425:AAHWwMAwDLFCva94BRIo1cJc0mFXJkketyI").strip()
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 shazam = Shazam()
 
-# Vaqtincha yuklangan videolarni saqlash uchun lug'at (media_id -> file_path)
+# Vaqtincha saqlash uchun lug'at (file_id -> file_path)
 media_store = {}
 
-# Render uchun soxta HTTP server
+# Render uchun soxta HTTP server (Port yopilib qolmasligi uchun)
 async def handle_ping(request):
-    return web.Response(text="Bot is active!")
+    return web.Response(text="Bot faol ishlamoqda!")
 
 async def start_dummy_server():
     app = web.Application()
@@ -33,14 +35,15 @@ async def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    logging.info(f"Port {port} da soxta server ishga tushdi.")
 
 # /start buyrug'i
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 **Xush kelibsiz!**\n\n"
-        "Instagram va TikTok video havolasini yuboring. Men videoni yuklab beraman "
-        "va uning musiqasini Shazam orqali topib berishim mumkin!"
+        "Menga **Instagram** yoki **TikTok** video havolasini yuboring.\n"
+        "Men videoni yuklab beraman, audiosini ajratib beraman yoki Shazam orqali **to'liq MP3 musiqasini** topib beraman!"
     )
 
 # Video havolasini qabul qilish
@@ -52,10 +55,10 @@ async def process_video_link(message: types.Message):
     is_tiktok = "tiktok.com" in url or "vt.tiktok.com" in url
 
     if not (is_instagram or is_tiktok):
-        await message.answer("⚠️ Iltimos, faqat **Instagram** yoki **TikTok** havolasini yuboring!")
+        await message.answer("⚠️ Iltimos, faqat **Instagram** yoki **TikTok** video havolasini yuboring!")
         return
 
-    status_msg = await message.answer("📥 Video tahlil qilinmoqda...")
+    status_msg = await message.answer("📥 Video tahlil qilinmoqda va yuklanmoqda...")
 
     if not os.path.exists("downloads"):
         os.makedirs("downloads")
@@ -69,7 +72,7 @@ async def process_video_link(message: types.Message):
         'quiet': True,
         'no_warnings': True,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
     }
 
@@ -90,20 +93,20 @@ async def process_video_link(message: types.Message):
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(text="📹 Videoni olish", callback_data=f"video:{file_id}"),
-                        InlineKeyboardButton(text="🎵 Audiosini olish", callback_data=f"audio:{file_id}")
+                        InlineKeyboardButton(text="🎵 Videodagi audioni olish", callback_data=f"audio:{file_id}")
                     ],
                     [
-                        InlineKeyboardButton(text="🔎 Shazam (To'liq musiqasi)", callback_data=f"shazam:{file_id}")
+                        InlineKeyboardButton(text="🔎 Shazam (To'liq musiqasini topish)", callback_data=f"shazam:{file_id}")
                     ]
                 ]
             )
-            await status_msg.edit_text("✅ Video tayyor! Qanday formatda yuklamoqchisiz?", reply_markup=keyboard)
+            await status_msg.edit_text("✅ Video yuklandi! Qaysi formatda kerak?", reply_markup=keyboard)
         else:
-            await status_msg.edit_text("❌ Videoni yuklab bo'lmadi.")
+            await status_msg.edit_text("❌ Videoni yuklab bo'lmadi. Profil yopiq (private) bo'lishi mumkin.")
 
     except Exception as e:
-        logging.error(f"Xatolik: {e}")
-        await status_msg.edit_text("❌ Xatolik yuz berdi. Video havolasi yoki profil yopiq bo'lishi mumkin.")
+        logging.error(f"Yuklash xatosi: {e}")
+        await status_msg.edit_text("❌ Xatolik yuz berdi. Havolani qayta tekshirib ko'ring.")
 
 # Tugmalar bosilganda ishlovchi handler
 @dp.callback_query(F.data.startswith(("video:", "audio:", "shazam:")))
@@ -112,7 +115,7 @@ async def handle_choice(call: types.CallbackQuery):
     file_path = media_store.get(file_id)
 
     if not file_path or not os.path.exists(file_path):
-        await call.answer("⚠️ Fayl topilmadi yoki muddati o'tgan.", show_alert=True)
+        await call.answer("⚠️ Fayl muddati o'tgan yoki o'chib ketgan.", show_alert=True)
         return
 
     if action == "video":
@@ -122,10 +125,10 @@ async def handle_choice(call: types.CallbackQuery):
         _clean_file(file_id)
 
     elif action == "audio":
-        await call.message.edit_text("🎼 Audio ajratib olinmoqda...")
+        await call.message.edit_text("🎼 Videodan audio ajratib olinmoqda...")
         audio_path = f"downloads/{file_id}.mp3"
         
-        # Videodan mp3 ajratish (FFmpeg)
+        # FFmpeg orqali videodan mp3 ajratish
         proc = await asyncio.create_subprocess_exec(
             'ffmpeg', '-y', '-i', file_path, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', audio_path,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
@@ -133,18 +136,18 @@ async def handle_choice(call: types.CallbackQuery):
         await proc.communicate()
 
         if os.path.exists(audio_path):
-            await call.message.answer_audio(audio=FSInputFile(audio_path), caption="🎵 Videodagi audio")
+            await call.message.answer_audio(audio=FSInputFile(audio_path), caption="🎵 Videodagi parcha audio")
             os.remove(audio_path)
             await call.message.delete()
         else:
-            await call.message.answer("❌ Audioni ajratishda xatolik bo'ldi.")
+            await call.message.answer("❌ Audioni ajratishda xatolik yuz berdi.")
         _clean_file(file_id)
 
     elif action == "shazam":
-        await call.message.edit_text("🔎 Shazam orqali musiqa qidirilmoqda...")
+        await call.message.edit_text("🔎 Shazam orqali musiqa aniqlanmoqda...")
         
         try:
-            # Shazam orqali tahlil qilish
+            # Shazam orqali trekni tahlil qilish
             out = await shazam.recognize(file_path)
             track = out.get('track')
 
@@ -153,46 +156,54 @@ async def handle_choice(call: types.CallbackQuery):
                 _clean_file(file_id)
                 return
 
-            title = track.get('title')
-            subtitle = track.get('subtitle')
-            song_name = f"{subtitle} - {title}"
+            title = track.get('title', '')
+            subtitle = track.get('subtitle', '')
+            song_name = f"{subtitle} - {title}".strip(" -")
 
-            await call.message.edit_text(f"🎧 Topildi: **{song_name}**\n📥 To'liq MP3 yuklanmoqda...")
+            await call.message.edit_text(f"🎧 Musiqa topildi: **{song_name}**\n📥 To'liq MP3 varianti yuklanmoqda...")
 
-            # YouTube'dan to'liq musiqani qidirish va yuklash
+            # To'liq MP3 ni saqlash fayl yo'li
             full_audio_path = f"downloads/full_{file_id}.mp3"
+            
+            # YouTube search orqali to'liq musiqani topish va yuklash
             ydl_opts_audio = {
                 'format': 'bestaudio/best',
-                'outtmpl': full_audio_path.replace('.mp3', ''),
-                'default_search': 'ytsearch1',
+                'outtmpl': f"downloads/full_{file_id}",
+                'noplaylist': True,
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
                 }],
                 'quiet': True,
+                'no_warnings': True,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
             }
 
             loop = asyncio.get_event_loop()
+            
             def download_full_song():
+                search_query = f"ytsearch1:{song_name} Audio"
                 with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
-                    ydl.download([song_name])
+                    ydl.download([search_query])
 
             await loop.run_in_executor(None, download_full_song)
 
             if os.path.exists(full_audio_path):
                 await call.message.answer_audio(
                     audio=FSInputFile(full_audio_path),
-                    caption=f"🎵 **{song_name}**\n\n🔎 *Shazam orqali topildi*"
+                    caption=f"🎵 **{song_name}**\n\n🔎 *Shazam va YouTube orqali yuklandi*"
                 )
                 os.remove(full_audio_path)
                 await call.message.delete()
             else:
-                await call.message.answer(f"🎶 Musiqa nomi: **{song_name}**, lekin MP3 faylini yuklash imkoni bo'lmadi.")
+                await call.message.edit_text(f"🎶 Musiqa nomi: **{song_name}**, lekin to'liq MP3 tayyorlashda xatolik bo'ldi.")
 
         except Exception as e:
-            logging.error(f"Shazam xatosi: {e}")
-            await call.message.edit_text("❌ Musiqani aniqlashda xatolik yuz berdi.")
+            logging.error(f"Shazam yuklash xatosi: {e}")
+            await call.message.edit_text("❌ Musiqani aniqlash yoki yuklashda xatolik yuz berdi.")
             
         finally:
             _clean_file(file_id)
@@ -203,7 +214,7 @@ def _clean_file(file_id):
         try:
             os.remove(file_path)
         except Exception as e:
-            logging.error(f"O'chirishda xatolik: {e}")
+            logging.error(f"Faylni o'chirishda xatolik: {e}")
 
 async def main():
     if not os.path.exists("downloads"):
