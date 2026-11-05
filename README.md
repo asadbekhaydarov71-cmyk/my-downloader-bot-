@@ -1,1 +1,2 @@
-# my-downloader-bot-
+aiogram>=3.13
+yt-dlp
