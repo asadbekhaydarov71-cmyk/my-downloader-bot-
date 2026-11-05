@@ -1,2 +1,1 @@
-aiogram>=3.13
-yt-dlp
+ista yuklovchi bot
