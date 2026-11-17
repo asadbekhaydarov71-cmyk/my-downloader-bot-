@@ -198,22 +198,12 @@ async def shazam_flow(msg: Message, url: str, folder: str):
         await msg.answer("🤷 Qo'shiq aniqlanmadi.")
         return
     title, artist = result
-    await msg.answer(f"🎶 {artist} — {title}\nMP3 qidirilmoqda...")
-    song_folder = tempfile.mkdtemp(prefix="song_")
-    try:
-        songs = await asyncio.to_thread(
-            dl_audio, f"ytsearch1:{artist} - {title}", song_folder
-        )
-        if not songs:
-            await msg.answer("MP3 topilmadi.")
-            return
-        f = songs[0]
-        if f.stat().st_size > MAX_BYTES:
-            await msg.answer("⚠️ MP3 50 MB dan katta.")
-            return
-        await msg.answer_audio(FSInputFile(f), title=title, performer=artist)
-    finally:
-        shutil.rmtree(song_folder, ignore_errors=True)
+    f = files[0]  # videoning o'zidan ajratilgan audio (YouTube kerak emas)
+    if f.stat().st_size > MAX_BYTES:
+        await msg.answer(f"🎶 {artist} — {title}\n\n⚠️ Audio 50 MB dan katta.")
+        return
+    await msg.answer(f"🎶 {artist} — {title}")
+    await msg.answer_audio(FSInputFile(f), title=title, performer=artist)
 
 
 @dp.message(F.text)
