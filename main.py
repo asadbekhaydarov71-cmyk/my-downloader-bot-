@@ -18,7 +18,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
-from shazamio import Shazam
 
 logging.basicConfig(level=logging.INFO)
 
@@ -85,6 +84,8 @@ def dl_audio(target: str, folder: str) -> list[Path]:
 
 
 async def recognize(path: Path):
+    from shazamio import Shazam  # kech import: muammo bo'lsa ham bot ishga tushadi
+
     shazam = Shazam()
     fn = getattr(shazam, "recognize", None) or shazam.recognize_song
     out = await fn(str(path))
@@ -185,7 +186,12 @@ async def shazam_flow(msg: Message, url: str, folder: str):
     if not files:
         await msg.answer("❌ Audio ajratib bo'lmadi.")
         return
-    result = await recognize(files[0])
+    try:
+        result = await recognize(files[0])
+    except Exception:
+        logging.exception("Shazam xatosi")
+        await msg.answer("❌ Shazam xizmati hozir ishlamayapti.")
+        return
     if not result:
         await msg.answer("🤷 Qo'shiq aniqlanmadi.")
         return
