@@ -188,9 +188,11 @@ async def shazam_flow(msg: Message, url: str, folder: str):
         return
     try:
         result = await recognize(files[0])
-    except Exception:
+    except Exception as e:
         logging.exception("Shazam xatosi")
-        await msg.answer("❌ Shazam xizmati hozir ishlamayapti.")
+        await msg.answer(
+            f"❌ Shazam xizmati hozir ishlamayapti.\n\n{type(e).__name__}: {str(e)[:300]}"
+        )
         return
     if not result:
         await msg.answer("🤷 Qo'shiq aniqlanmadi.")
