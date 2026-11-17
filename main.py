@@ -39,6 +39,7 @@ bot = Bot(TOKEN)
 dp = Dispatcher()
 sem = asyncio.Semaphore(2)
 PENDING: dict[str, str] = {}  # qisqa kalit -> havola
+SONGS: dict[str, tuple] = {}  # qisqa kalit -> (ijrochi, nom)
 
 
 def allowed(user_id: int) -> bool:
@@ -202,8 +203,56 @@ async def shazam_flow(msg: Message, url: str, folder: str):
     if f.stat().st_size > MAX_BYTES:
         await msg.answer(f"🎶 {artist} — {title}\n\n⚠️ Audio 50 MB dan katta.")
         return
-    await msg.answer(f"🎶 {artist} — {title}")
     await msg.answer_audio(FSInputFile(f), title=title, performer=artist)
+    skey = uuid.uuid4().hex[:8]
+    if len(SONGS) > 200:
+        SONGS.pop(next(iter(SONGS)))
+    SONGS[skey] = (artist, title)
+    await msg.answer(
+        f"🎶 {artist} — {title}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="⬇️ To'liq qo'shiqni yuklash", callback_data=f"f:{skey}")]
+            ]
+        ),
+    )
+
+
+@dp.callback_query(F.data.startswith("f:"))
+async def on_full_song(cb: CallbackQuery):
+    if not allowed(cb.from_user.id):
+        await cb.answer()
+        return
+    song = SONGS.get(cb.data.split(":", 1)[1])
+    if not song:
+        await cb.answer("Eskirgan, videoni qayta yuboring.", show_alert=True)
+        return
+    await cb.answer("Qidirilmoqda...")
+    artist, title = song
+    folder = tempfile.mkdtemp(prefix="song_")
+    try:
+        songs, errors = [], []
+        async with sem:
+            for prefix in ("scsearch1:", "ytsearch1:"):  # avval SoundCloud, keyin YouTube
+                try:
+                    songs = await asyncio.to_thread(
+                        dl_audio, f"{prefix}{artist} - {title}", folder
+                    )
+                    if songs:
+                        break
+                except Exception as e:
+                    logging.exception("To'liq qo'shiq xatosi (%s)", prefix)
+                    errors.append(f"{prefix[:2]}: {str(e)[:250]}")
+        if not songs:
+            await cb.message.answer("❌ To'liq qo'shiq topilmadi.\n\n" + "\n\n".join(errors))
+            return
+        f = songs[0]
+        if f.stat().st_size > MAX_BYTES:
+            await cb.message.answer("⚠️ MP3 50 MB dan katta.")
+            return
+        await cb.message.answer_audio(FSInputFile(f), title=title, performer=artist)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 @dp.message(F.text)
